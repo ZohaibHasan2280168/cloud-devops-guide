@@ -1,0 +1,114 @@
+---
+# ==============================================================================
+# Ansible Playbook: Automated DevOps Node Provisioner
+# Author: Zohaib Hassan (Cloud & DevOps Engineer)
+# Usage: ansible-playbook -i localhost, -c local devops-playbook.yml
+# ==============================================================================
+- name: Provision Production DevOps Engineering Environment
+  hosts: localhost
+  connection: local
+  become: true
+
+  vars:
+    devops_user: "{{ ansible_env.SUDO_USER | default(ansible_user_id) }}"
+    packages:
+      - curl
+      - wget
+      - git
+      - jq
+      - unzip
+      - htop
+      - net-tools
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - build-essential
+
+  tasks:
+    - name: Update apt cache and install core system utilities
+      apt:
+        name: "{{ packages }}"
+        state: present
+        update_cache: true
+
+    # Docker Installation
+    - name: Create apt keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker official GPG key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add Docker official apt repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker CE, CLI, and Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker service is running and enabled on boot
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add primary user to docker group
+      user:
+        name: "{{ devops_user }}"
+        groups: docker
+        append: true
+
+    # Kubectl Installation
+    - name: Download official stable kubectl binary
+      get_url:
+        url: "https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+
+    # Minikube Installation
+    - name: Download Minikube binary
+      get_url:
+        url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+        dest: /usr/local/bin/minikube
+        mode: '0755'
+
+    # Helm 3 Installation
+    - name: Download Helm install script
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get_helm.sh
+        mode: '0700'
+
+    - name: Execute Helm install script
+      command: /tmp/get_helm.sh
+      args:
+        creates: /usr/local/bin/helm
+
+    # Terraform Installation
+    - name: Add HashiCorp official apt repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+        filename: hashicorp
+      ignore_errors: true
+
+    - name: Install Terraform
+      apt:
+        name: terraform
+        state: present
+      ignore_errors: true

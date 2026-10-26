@@ -8,6 +8,7 @@
 
 | Module | Title | Core Focus & Topics Covered |
 | :--- | :--- | :--- |
+| **[00](00-tooling-installations/README.md)** | **[Tooling & Production Installations](00-tooling-installations/README.md)** | Automated Bash scripts, Ansible YAML & Cloud-Init for Docker, K8s, Minikube, Helm, AWS CLI, Terraform. |
 | **[01](01-linux-ubuntu/README.md)** | **[Linux & Ubuntu Production Administration](01-linux-ubuntu/README.md)** | User management, permissions, systemd, journalctl, swap setup, storage, ufw, SSH keys. |
 | **[02](02-docker-containerization/README.md)** | **[Docker & Multi-Stage Containerization](02-docker-containerization/README.md)** | Dockerfile best practices, multi-stage builds, networks, volumes, Docker Compose profiles. |
 | **[03](03-aws-core-networking-vpc/README.md)** | **[AWS Core Cloud Networking & VPC](03-aws-core-networking-vpc/README.md)** | VPC, CIDR, Public vs Private Subnets, IGW, Route Tables, NAT, Multi-AZ High Availability. |
