@@ -134,14 +134,16 @@ du -sh * | sort -h
 # Interactive process monitor (CPU, Memory, Threads)
 htop
 
-# Check listening network sockets and active ports
-sudo netstat -tulpn
-# or modern alternative:
-sudo ss -tulpn
+# Check listening network sockets and active ports (modern standard)
+sudo ss -tuln
+# (Flags: -t = TCP, -u = UDP, -l = Listening, -n = Numeric ports)
 
-# Find which process is listening on a specific port (e.g. port 80 or 8000)
+# Find which exact process (PID) is holding a specific port (e.g. port 3002 or 80)
+sudo lsof -i :3002
 sudo lsof -i :80
-sudo lsof -i :8000
+
+# Clean, brief 1-line table of all network interfaces & IPs (modern replacement for ifconfig)
+ip -br a
 ```
 
 ---
