@@ -375,8 +375,12 @@ kubectl top pods
 ### D. Deployments, Rollouts, Scaling & Self-Healing Testing
 ```bash
 # ☸️ [Kubernetes / EKS Terminal]
-# Apply all manifests in a directory
+# Apply all manifests in a directory (Declarative GitOps approach)
 kubectl apply -f k8s/
+
+# Imperative Image Update (Fast CLI change on live cluster without modifying YAML)
+# Syntax: kubectl set image deployment/<deployment-name> <container-name>=<new-image>:<tag>
+kubectl set image deployment/portfolio-deployment portfolio-app=zohaibhasan/3d-portfolio:v2
 
 # Scale deployment replicas manually
 kubectl scale deployment portfolio-deployment --replicas=4
@@ -385,7 +389,7 @@ kubectl scale deployment portfolio-deployment --replicas=4
 kubectl delete pod <pod-name>
 kubectl get pods -l app=portfolio -w
 
-# Check rollout progress
+# Check zero-downtime rolling update status
 kubectl rollout status deployment/portfolio-deployment
 
 # Trigger a rolling restart of all pods in a deployment
@@ -395,3 +399,21 @@ kubectl rollout restart deployment/portfolio-deployment
 kubectl rollout history deployment/portfolio-deployment
 kubectl rollout undo deployment/portfolio-deployment
 ```
+
+---
+
+### E. Day 1 (Initial Setup) vs Day 2 (Live Zero-Downtime Update)
+| Stage | Action | Commands Executed |
+| :--- | :--- | :--- |
+| **Day 1: Initial Deployment** | Cluster is completely empty. Create Deployment and Service from scratch. | 1. Import base image into containerd.<br>2. `kubectl apply -f k8s/`.<br>3. K8s starts 2 brand new pods. |
+| **Day 2: Live Rolling Update** | App is already live serving users. Update code with **zero downtime**. | 1. Build & Tag `v2` image.<br>2. Import `v2` into containerd.<br>3. `kubectl set image ...` or `kubectl apply -f k8s/`.<br>4. K8s starts `v2` pod, verifies health, then deletes `v1` pod. |
+
+---
+
+### F. Docker Image Naming Structure: Why the Slash `/`?
+Syntax: `[Registry / Username] / [Repository Name] : [Version Tag]`
+
+- **Without Slash (`zohaib-portfolio:v1`):** Local-only tag on your host Docker engine. Cannot be pushed to remote registries because Docker has no account context.
+- **With Slash (`zohaibhasan/3d-portfolio:v2`):** `zohaibhasan` is your Docker Hub username. When pushed, Docker Hub routes it to your repository.
+- **AWS ECR (`479537131188.dkr.ecr.us-east-1.amazonaws.com/portfolio:v2`):** Cloud ECR registry URI prefixed before the slash.
+
