@@ -21,6 +21,7 @@
 | **[10](10-gitops-argocd/README.md)** | **[GitOps Continuous Delivery with ArgoCD](10-gitops-argocd/README.md)** | Declarative CD, ArgoCD CRD, Auto-sync, Self-healing, initial admin secret, port-forwarding. |
 | **[11](11-cicd-github-actions/README.md)** | **[GitHub Actions CI/CD Automation](11-cicd-github-actions/README.md)** | Multi-tier pipelines, GitHub Secrets, ECR push, auto-committing manifest tags to git repo. |
 | **[12](12-production-troubleshooting/README.md)** | **[Production Troubleshooting & War Stories](12-production-troubleshooting/README.md)** | Next.js standalone DNS rewrites, shallow probes, CrashLoopBackOff, CoreDNS split-horizon. |
+| **[13](13-git-and-github-mastery/README.md)** | **[Git & GitHub Production Mastery](13-git-and-github-mastery/README.md)** | Git internals (Objects, Hashes), remotes, branching, stashing, 3-way merges, conflicts, reflog, rebase, cherry-pick, branch protection. |
 
 ---
 
