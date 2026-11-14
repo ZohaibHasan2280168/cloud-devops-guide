@@ -79,12 +79,127 @@ graph TD
 
 ---
 
-## 3. Quick Triage Reference Table
+### 💥 Case Study 6: The 12-Hour AWS ECR Token Expiration & Broken CD Loop
+- **The Symptom:** A GitHub Actions CI/CD pipeline pushes new images to AWS ECR, but the EC2 host containers run outdated images (e.g. 8 days old), and running `docker pull` on EC2 outputs:
+  ```text
+  Error response from daemon: error from registry: Your authorization token has expired
+  ```
+- **Root Cause:** AWS ECR authentication tokens expire every 12 hours. If an EC2 host lacks the AWS CLI or IAM instance profile credentials, it cannot refresh its own Docker login. Furthermore, CI builds pushed to ECR without an automated webhook/SSH trigger to notify EC2 to pull the new image.
+- **The Fix:** Implement an automated Continuous Deployment (CD) job in GitHub Actions. The GitHub runner (which has AWS credentials) fetches a fresh token via `aws ecr get-login-password`, opens an SSH pipe into EC2, authenticates Docker with `echo "$TOKEN" | docker login --username AWS --password-stdin <ECR_REGISTRY>`, pulls the immutable version tag, updates `docker-compose.yml`, and restarts the container:
+  ```bash
+  ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa user@ec2-host << EOF
+    echo "${TOKEN}" | docker login --username AWS --password-stdin ${REGISTRY}
+    docker pull ${TARGET_IMAGE}
+    sed -i -E 's|image: .*myapp:.*|image: '"${TARGET_IMAGE}"'|g' ~/docker-compose.yml
+    docker compose up -d myapp
+  EOF
+  ```
+
+---
+
+### 💥 Case Study 7: The Multi-Subdomain CORS Trap & Regex Specificity
+- **The Symptom:** Frontend works on production (`admin.systemic.pk`), but on staging (`admin.staging.systemic.pk`) or multi-tenant staging (`client.staging.systemic.pk`), all API calls fail with:
+  ```text
+  Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource.
+  (Reason: CORS header 'Access-Control-Allow-Origin' missing). Status code: 200 / (null).
+  ```
+- **Root Cause:** The backend CORS middleware employed a strict single-subdomain regular expression:
+  ```javascript
+  const pattern = new RegExp(`^https://([a-z0-9-]+\\.)?${escapedRoot}$`, "i");
+  ```
+  While `admin.systemic.pk` matched (1 subdomain), `admin.staging.systemic.pk` contains 2 subdomains (`admin` and `staging`), causing the regex to reject the origin and omit the `Access-Control-Allow-Origin` header on preflight `OPTIONS` requests.
+- **The Fix:** Upgrade the CORS regex to match multi-level nesting using the Kleene star `*`:
+  ```javascript
+  if (/^https?:\/\/([a-z0-9-]+\.)*(systemic\.pk|veave\.pk)(:\d+)?$/i.test(normalized)) {
+    return true;
+  }
+  ```
+  Diagnose immediately using curl preflight simulation:
+  ```bash
+  curl -si -X OPTIONS "https://api.systemic.pk/api/auth/login" \
+    -H "Origin: https://admin.staging.systemic.pk" \
+    -H "Access-Control-Request-Method: POST" | grep -i "access-control-allow-origin"
+  ```
+
+---
+
+### 💥 Case Study 8: CrashLoop in Docker Containers Due to Missing Storage/Cloud Secrets
+- **The Symptom:** Newly pulled container fails to stay running, entering status:
+  ```text
+  Restarting (1) 2 seconds ago
+  ```
+- **Root Cause:** Application initialization code added strict validation for new cloud services (e.g. Cloudflare R2 / AWS S3 buckets), but the host's `.env` file was not updated with the newly required keys (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, etc.).
+- **The Fix:** Inspect the crash reason with `docker logs --tail 50 <container_name>`, append missing variables to `~/backend.env`, and restart with `docker compose up -d <service>`.
+
+---
+
+### 💥 Case Study 9: The 220MB Artifact Pipeline Choke
+- **The Symptom:** CI/CD builds hang for 15+ minutes on `actions/upload-artifact@v4` or fail due to network socket timeouts.
+- **Root Cause:** Splitting CI into Job 1 (`build`) and Job 2 (`docker package`) required uploading a 240MB Vite/Next.js output bundle containing 3D models and videos over the GitHub Actions artifact storage API, only to download it again in Job 2.
+- **The Fix:** Consolidate into a unified single-runner build & push job. The local `build/` artifact is copied directly into the Docker image via local Dockerfile context without intermediate network hops, reducing pipeline duration from 18 minutes to under 2 minutes.
+
+---
+
+## 3. Production Docker, Compose & Host Inspection Toolkit
+
+### A. Deep Container & Image Inspection
+```bash
+# 1. Format-specific inspection to verify active image tag
+docker inspect <container_name> --format '{{.Config.Image}}'
+
+# 2. Check healthcheck status and failure logs
+docker inspect <container_name> --format '{{json .State.Health}}' | jq .
+
+# 3. View container environment variables (excluding system defaults)
+docker inspect <container_name> --format '{{range .Config.Env}}{{println .}}{{end}}'
+
+# 4. Check container IP address on internal bridge network
+docker inspect <container_name> --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+
+# 5. Check Docker Compose project label
+docker inspect <container_name> --format '{{index .Config.Labels "com.docker.compose.project"}}'
+```
+
+### B. Live Container Hot-Patching & Maintenance
+```bash
+# 1. Copy updated configuration directly into running container (Zero-rebuild hotpatch)
+docker cp /path/to/updated-file.js <container_name>:/app/config/file.js
+
+# 2. Restart container to load new configuration
+docker restart <container_name>
+
+# 3. Commit running container into a tagged local image (Preserve hotpatch)
+docker commit <container_name> myapp:hotfix-v1
+
+# 4. Clean up dangling images and stopped containers to free disk space
+docker system prune -f
+```
+
+### C. Remote SSH Debugging Idioms
+```bash
+# 1. Non-interactive remote command execution with clean output
+ssh -o StrictHostKeyChecking=no -i <key.pem> ubuntu@<host> "docker ps && docker images"
+
+# 2. Executing multi-line bash scripts remotely via Heredoc
+ssh -o StrictHostKeyChecking=no -i <key.pem> ubuntu@<host> bash << 'EOF'
+  set -e
+  docker pull myregistry/myapp:v1.2.3
+  docker compose -f ~/docker-compose.yml up -d
+  docker system prune -f
+EOF
+```
+
+---
+
+## 4. Quick Triage Reference Table
 
 | Symptom / Error | Typical Cause | Instant Command to Diagnose |
 | :--- | :--- | :--- |
 | `CrashLoopBackOff` | Application crash on boot, missing env var, DB connection fail | `kubectl logs <pod> --previous` |
+| `Restarting (1)` | Missing environment variable, uncaught startup exception | `docker logs --tail 50 <container_name>` |
 | `ImagePullBackOff` | Wrong image tag, typo in ECR URL, expired IAM permissions | `kubectl describe pod <pod>` |
+| `Token has expired` | AWS ECR 12-hour authorization token timed out | `aws ecr get-login-password \| docker login --password-stdin` |
+| `CORS header missing` | Origin regex mismatch, multi-level subdomain rejected | `curl -si -X OPTIONS "<API>" -H "Origin: <FRONTEND>"` |
 | `Pending` Pod | Insufficient CPU/RAM on worker nodes, node unschedulable | `kubectl describe pod <pod> \| grep -A 5 Events` |
 | `502 Bad Gateway` | Reverse proxy (Nginx/ELB) cannot reach container port | `curl -I localhost:3000` on host |
 | `Connection Refused: 5432` | Security Group not chained, RDS in wrong subnet | `nc -zv <rds-host> 5432` from EC2 |

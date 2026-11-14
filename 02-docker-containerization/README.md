@@ -390,4 +390,23 @@ sudo lsof -i :3002
 ```
 *(If a rogue process is holding your port, terminate it using: `sudo kill -9 <PID>`)*
 
+---
+
+### G. Image Tagging Strategy: Mutable `:latest` vs Immutable Version Tags & Instant Rollbacks
+
+#### ⚠️ The Danger of Mutable `:latest` Tag (Anti-Pattern):
+In production DevOps, relying on `:latest` is a critical antipattern:
+1. **Zero Traceability:** If a container runs `myapp:latest`, you cannot tell which Git commit or pull request is live.
+2. **Broken Rollback:** If a bad build overwrites `:latest`, you cannot easily revert without rebuilding an older state.
+3. **Caching Ambiguity:** `docker compose up -d` might not detect image updates because the tag name hasn't changed.
+
+#### 🛡️ The DevOps Standard: Immutable Tags (Git Commit SHA / SemVer):
+Every image is tagged with an **Immutable Tag** matching the Git short SHA or semantic release:
+* **Format:** `veave-backend:staging-cd4d220` or `veave-backend:prod-d821656`
+* **Why it matters:**
+  * **Deterministic:** Commit `cd4d220` will always produce the exact same Docker image byte-for-byte.
+  * **Instant Rollbacks:** To rollback an emergency bug, you simply change the tag in `docker-compose.yml` back to the previous commit (e.g. `staging-6d72de5`) and run `docker compose up -d`. Zero rebuild required!
+  * **Docker Compose Detection:** Because the tag string changes, Docker Compose immediately detects the difference and recreates the container seamlessly.
+
+
 
